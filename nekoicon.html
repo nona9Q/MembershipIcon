@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>メンシプ猫アイコンメーカー</title>
+<style>
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: #f4f4f9;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin: 0;
+    padding: 20px;
+    color: #333;
+}
+
+h1 { margin-bottom: 20px; font-size: 24px; }
+
+.container {
+    background: white;
+    padding: 20px;
+    border-radius: 12px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    text-align: center;
+    max-width: 600px;
+    width: 100%;
+}
+
+.controls {
+    margin-bottom: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.btn-group {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    margin-top: 10px;
+}
+
+input[type="file"] {
+    padding: 10px;
+    border: 2px dashed #ddd;
+    border-radius: 8px;
+    width: 100%;
+    box-sizing: border-box;
+    cursor: pointer;
+}
+
+button {
+    padding: 10px 20px;
+    font-size: 14px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: background 0.2s;
+}
+
+#dlPng { background-color: #007bff; color: white; }
+#dlPng:hover { background-color: #0056b3; }
+
+#dlIco { background-color: #28a745; color: white; }
+#dlIco:hover { background-color: #1e7e34; }
+
+canvas {
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    background-image: linear-gradient(45deg, #eee 25%, transparent 25%, transparent 75%, #eee 75%),
+                      linear-gradient(45deg, #eee 25%, transparent 25%, transparent 75%, #eee 75%);
+    background-size: 20px 20px;
+    background-position: 0 0, 10px 10px;
+    max-width: 100%;
+    height: auto;
+    margin-top: 10px;
+}
+
+.note {
+    font-size: 12px;
+    color: #666;
+    margin-top: 5px;
+}
+</style>
+</head>
+<body>
+
+<div class="container">
+    <h1>メンシプ猫アイコンメーカー</h1>
+    
+    <div class="controls">
+        <label>画像を選択してください:</label>
+        <input type="file" id="imgInput" accept="image/*">
+        
+        <div class="btn-group">
+            <button id="dlPng">PNGで保存</button>
+            <button id="dlIco">ICOで保存 (.ico)</button>
+        </div>
+        <p class="note">※Webpで高画質にする技は使えなくなったのでICOを使います</p>
+    </div>
+
+    <canvas id="canvas" width="500" height="500"></canvas>
+</div>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+
+let imgBack = new Image(); // 固定背景
+let imgUser = new Image(); // ユーザー画像
+
+// 画像読み込みフラグ
+let backLoaded = false;
+let userLoaded = false;
+
+// 1. 固定画像 (back.png) の読み込み
+// GitHub PagesなどWebサーバー上ではこれで動作します
+imgBack.crossOrigin = "Anonymous"; 
+imgBack.src = 'back.png'; 
+
+imgBack.onload = () => { 
+    backLoaded = true; 
+    draw(); 
+};
+imgBack.onerror = () => {
+    alert('エラー: back.png が読み込めません。HTMLと同じ場所に置いてください。');
+};
+
+// 2. ユーザー画像の読み込み
+document.getElementById('imgInput').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (file) {
+        imgUser = new Image();
+        imgUser.onload = () => { 
+            userLoaded = true; 
+            draw(); 
+        };
+        imgUser.src = URL.createObjectURL(file);
+    }
+});
+
+// 角丸関数
+function roundRect(ctx, x, y, width, height, radius) {
+    ctx.beginPath();
+    ctx.moveTo(x + radius, y);
+    ctx.lineTo(x + width - radius, y);
+    ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+    ctx.lineTo(x + width, y + height - radius);
+    ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+    ctx.lineTo(x + radius, y + height);
+    ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+    ctx.lineTo(x, y + radius);
+    ctx.quadraticCurveTo(x, y, x + radius, y);
+    ctx.closePath();
+}
+
+// 描画メイン関数
+function draw() {
+    // キャンバスクリア
+    ctx.clearRect(0, 0, 500, 500);
+
+    if (!backLoaded) return;
+
+    // --- ユーザー画像 (背面に配置するため先に計算するが、クリップが必要) ---
+    // ここは元のロジック通り、back.pngより「下」のレイヤーとして処理
+    // ただし、位置合わせは back.png の「透明部分」に合わせる前提のようなので
+    // 実際には back.png を手前に描画し、ユーザー画像を奥に描画します。
+    
+    // back.png のサイズ計算 (高さ500基準)
+    const backH = 500;
+    const backW = imgBack.width * (backH / imgBack.height);
+    const backX = (500 - backW) / 2;
+
+    if (userLoaded) {
+        // ユーザー画像サイズ計算
+        const userH = 361.36;
+        const userW = imgUser.width * (userH / imgUser.height);
+        
+        // 中央揃え
+        const userX = (500 - userW) / 2;
+        // Y位置: back画像の下辺から 10.84px 上 - 画像の高さ
+        const userY = 500 - 10.84 - userH;
+
+        // クリップして描画
+        ctx.save();
+        roundRect(ctx, userX, userY, userW, userH, 54);
+        ctx.clip();
+        ctx.drawImage(imgUser, userX, userY, userW, userH);
+        ctx.restore();
+    }
+
+    // --- back.png (前面) ---
+    ctx.drawImage(imgBack, backX, 0, backW, backH);
+}
+
+// PNGダウンロード
+document.getElementById('dlPng').addEventListener('click', () => {
+    if(!checkReady()) return;
+    const link = document.createElement('a');
+    link.download = 'cat_icon.png';
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+});
+
+// ICOダウンロード
+document.getElementById('dlIco').addEventListener('click', async () => {
+    if(!checkReady()) return;
+
+    // ICO用に256x256にリサイズする
+    const icoCanvas = document.createElement('canvas');
+    icoCanvas.width = 256;
+    icoCanvas.height = 256;
+    const icoCtx = icoCanvas.getContext('2d');
+    
+    // 現在の500x500キャンバスを256x256に縮小描画
+    icoCtx.drawImage(canvas, 0, 0, 256, 256);
+
+    // Blob化してICOヘッダーを付与
+    icoCanvas.toBlob(async (blob) => {
+        const fileData = await createIcoFile(blob);
+        const link = document.createElement('a');
+        link.download = 'cat_icon.ico';
+        link.href = URL.createObjectURL(fileData);
+        link.click();
+    }, 'image/png');
+});
+
+function checkReady() {
+    if (!backLoaded) {
+        alert('背景画像(back.png)が読み込まれていません');
+        return false;
+    }
+    return true;
+}
+
+// PNG BlobからICOファイル(Blob)を生成する関数
+// (Windows Vista以降対応のPNG圧縮ICO)
+async function createIcoFile(pngBlob) {
+    const pngBuffer = await pngBlob.arrayBuffer();
+    const pngData = new Uint8Array(pngBuffer);
+    const size = pngData.length;
+
+    // ICOヘッダー (6 bytes) + ディレクトリエントリ (16 bytes) = 22 bytes
+    const header = new Uint8Array(22);
+    const view = new DataView(header.buffer);
+
+    // --- ICONDIR ---
+    view.setUint16(0, 0, true); // Reserved (must be 0)
+    view.setUint16(2, 1, true); // Type (1 = ICO)
+    view.setUint16(4, 1, true); // Count (1 image)
+
+    // --- ICONDIRENTRY ---
+    view.setUint8(6, 0);   // Width (0 means 256px)
+    view.setUint8(7, 0);   // Height (0 means 256px)
+    view.setUint8(8, 0);   // Color count (0 = no palette)
+    view.setUint8(9, 0);   // Reserved
+    view.setUint16(10, 1, true);  // Planes
+    view.setUint16(12, 32, true); // BitCount
+    view.setUint32(14, size, true); // Size of data (PNG size)
+    view.setUint32(18, 22, true);   // Offset (Header 6 + Entry 16 = 22)
+
+    // ヘッダーとPNGデータを結合
+    const icoBlob = new Blob([header, pngData], { type: 'image/x-icon' });
+    return icoBlob;
+}
+</script>
+</body>
+</html>
